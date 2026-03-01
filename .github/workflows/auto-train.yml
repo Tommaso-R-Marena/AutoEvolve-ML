@@ -9,11 +9,13 @@ on:
       - main
     paths:
       - 'train.py'
+      - 'data_sources.py'
       - 'requirements.txt'
 
 jobs:
   train:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       pull-requests: write
@@ -48,74 +50,63 @@ jobs:
     
     - name: Run tests before training
       run: |
-        python -m pytest tests/ -v || echo "Tests not found or failed, continuing"
+        python -m pytest tests/ -v || echo "Tests not found, continuing"
       continue-on-error: true
     
-    - name: Run training with auto-save
+    - name: Run training
       id: train
       run: |
-        # Run training
         python train.py
         TRAIN_EXIT=$?
         
         echo "Training exit code: $TRAIN_EXIT"
         
-        # Check if training succeeded
         if [ $TRAIN_EXIT -ne 0 ]; then
-          echo "Training failed with exit code $TRAIN_EXIT"
-          echo "IMPROVEMENT=0" >> $GITHUB_OUTPUT
           echo "TRAINING_FAILED=true" >> $GITHUB_OUTPUT
-          exit 0  # Don't fail workflow, just skip optimization
+          echo "IMPROVEMENT=0" >> $GITHUB_OUTPUT
+          exit 0
         fi
         
         echo "TRAINING_FAILED=false" >> $GITHUB_OUTPUT
         
-        # Check if significant improvement was made
         if [ -f "improvement_metrics.json" ]; then
           IMPROVEMENT=$(python -c "import json; data=json.load(open('improvement_metrics.json')); print(data.get('improvement_percentage', 0))" 2>/dev/null || echo "0")
           echo "IMPROVEMENT=$IMPROVEMENT" >> $GITHUB_OUTPUT
           echo "Performance improvement: $IMPROVEMENT%"
         else
           echo "IMPROVEMENT=0" >> $GITHUB_OUTPUT
-          echo "No improvement metrics found"
         fi
       continue-on-error: true
     
-    - name: Commit significant improvements immediately
+    - name: Commit significant improvements
       if: steps.train.outputs.TRAINING_FAILED != 'true' && steps.train.outputs.IMPROVEMENT != '0'
       run: |
         IMPROVEMENT="${{ steps.train.outputs.IMPROVEMENT }}"
         THRESHOLD=3.0
         
-        # Safe comparison using Python
-        SHOULD_COMMIT=$(python -c "try:\n  import sys\n  print('true' if float('$IMPROVEMENT') >= $THRESHOLD else 'false')\nexcept:\n  print('false')" || echo "false")
+        SHOULD_COMMIT=$(python -c "try:\n  print('true' if float('$IMPROVEMENT') >= $THRESHOLD else 'false')\nexcept:\n  print('false')" || echo "false")
         
         if [ "$SHOULD_COMMIT" = "true" ]; then
-          echo "🎉 Significant improvement detected: ${IMPROVEMENT}% - Auto-committing immediately"
+          echo "🎉 Significant improvement: ${IMPROVEMENT}%"
           
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           
-          # Add all training artifacts
-          git add model_checkpoint.pth metrics.json training_state.json training_state_optimizer.pth improvement_metrics.json || true
-          git add data/chunks/*.parquet 2>/dev/null || true
-          git add data/database_metadata.json 2>/dev/null || true
-          
-          git diff --staged --quiet || git commit -m "⚡ Significant improvement: ${IMPROVEMENT}% gain [$(date +'%Y-%m-%d %H:%M:%S UTC')]" -m "Auto-committed due to exceeding ${THRESHOLD}% improvement threshold" || true
-          git push || echo "Push failed, will retry in standard commit"
+          git add -A || true
+          git diff --staged --quiet || git commit -m "⚡ Significant improvement: ${IMPROVEMENT}% [$(date +'%Y-%m-%d %H:%M')]" || true
+          git push || echo "Push failed"
           
           echo "AUTO_COMMITTED=true" >> $GITHUB_ENV
         else
-          echo "Improvement ${IMPROVEMENT}% below ${THRESHOLD}% threshold - standard commit"
           echo "AUTO_COMMITTED=false" >> $GITHUB_ENV
         fi
       continue-on-error: true
     
-    - name: Evaluate if self-modification needed
+    - name: Self-modification check
       if: steps.train.outputs.TRAINING_FAILED != 'true'
       id: self_modify
       run: |
-        python self_modifier.py || echo "Self-modification check failed"
+        python self_modifier.py || echo "Self-mod check failed"
         
         if [ -f "modification_proposal.json" ]; then
           echo "NEEDS_MODIFICATION=true" >> $GITHUB_OUTPUT
@@ -125,16 +116,14 @@ jobs:
       continue-on-error: true
     
     - name: Create self-modification PR
-      if: steps.train.outputs.TRAINING_FAILED != 'true' && steps.self_modify.outputs.NEEDS_MODIFICATION == 'true'
+      if: steps.self_modify.outputs.NEEDS_MODIFICATION == 'true'
       uses: actions/github-script@v7
       continue-on-error: true
       with:
         script: |
           const fs = require('fs');
-          
           try {
             const proposal = JSON.parse(fs.readFileSync('modification_proposal.json', 'utf8'));
-            
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             const branchName = `auto-modify-${timestamp}`;
             
@@ -152,13 +141,12 @@ jobs:
             });
             
             for (const file of proposal.files) {
-              const content = Buffer.from(file.content).toString('base64');
               await github.rest.repos.createOrUpdateFileContents({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 path: file.path,
-                message: `Self-modification: ${file.reason}`,
-                content: content,
+                message: `Self-mod: ${file.reason}`,
+                content: Buffer.from(file.content).toString('base64'),
                 branch: branchName
               });
             }
@@ -166,42 +154,34 @@ jobs:
             await github.rest.pulls.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `🤖 Self-Modification: ${proposal.title}`,
+              title: `🤖 Self-Mod: ${proposal.title}`,
               head: branchName,
               base: 'main',
-              body: `## Automated Self-Modification\n\n${proposal.description}\n\n### Changes\n${proposal.files.map(f => `- **${f.path}**: ${f.reason}`).join('\n')}\n\n### Metrics\n- **Performance improvement**: ${(proposal.expected_improvement * 100).toFixed(2)}%\n- **Confidence**: ${(proposal.confidence * 100).toFixed(1)}%`
+              body: `## Self-Modification\n\n${proposal.description}\n\n### Changes\n${proposal.files.map(f => `- ${f.path}: ${f.reason}`).join('\n')}`
             });
-          } catch (error) {
-            console.error('Failed to create self-modification PR:', error);
+          } catch (e) {
+            console.error('PR creation failed:', e);
           }
     
-    - name: Commit and push model weights (standard commit)
+    - name: Standard commit
       if: env.AUTO_COMMITTED != 'true'
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
-        
-        git add model_checkpoint.pth metrics.json training_state.json training_state_optimizer.pth improvement_metrics.json || true
-        git add data/chunks/*.parquet 2>/dev/null || true
-        git add data/database_metadata.json 2>/dev/null || true
-        
-        git diff --staged --quiet || git commit -m "Auto-train: Update model weights [$(date +'%Y-%m-%d %H:%M:%S UTC')]" || echo "Nothing to commit"
-        git push || echo "Push failed"
+        git add -A || true
+        git diff --staged --quiet || git commit -m "Auto-train: Update [$(date +'%Y-%m-%d %H:%M')]" || true
+        git push || true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       continue-on-error: true
     
-    - name: Upload training artifacts
+    - name: Upload artifacts
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: training-results-${{ github.run_number }}
+        name: training-${{ github.run_number }}
         path: |
-          model_checkpoint.pth
-          metrics.json
-          training_state.json
-          training_state_optimizer.pth
-          improvement_metrics.json
-          data/database_metadata.json
+          *.pth
+          *.json
         retention-days: 30
       continue-on-error: true
