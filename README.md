@@ -4,19 +4,20 @@
 [![Model Evaluation](https://github.com/Tommaso-R-Marena/AutoEvolve-ML/actions/workflows/evaluate.yml/badge.svg)](https://github.com/Tommaso-R-Marena/AutoEvolve-ML/actions/workflows/evaluate.yml)
 [![Quality Gate](https://github.com/Tommaso-R-Marena/AutoEvolve-ML/actions/workflows/quality-gate.yml/badge.svg)](https://github.com/Tommaso-R-Marena/AutoEvolve-ML/actions/workflows/quality-gate.yml)
 
-A novel self-improving machine learning system that continuously evolves through automated training, synthetic data generation, and **self-modification with quality gates**. The model trains automatically via GitHub Actions and Google Colab, with weights persistently saved to the repository. When performance stagnates, the system proposes modifications to its own code, but must pass rigorous quality thresholds before changes are approved.
+A novel self-improving machine learning system that continuously evolves through automated training, synthetic data generation, and **autonomous self-modification with quality gates**. The model trains automatically via GitHub Actions and Google Colab, with weights persistently saved to the repository. When performance stagnates, the system proposes modifications to its own code, validates them through rigorous testing, and **automatically merges approved changes**.
 
 ## 🚀 Key Features
 
 - **Self-Improving Architecture**: Neural network that dynamically evolves its structure based on performance metrics
-- **Self-Modifying Code**: System analyzes its own performance and proposes code changes to improve training
-- **Quality Gates**: All self-modifications must pass tests, coverage requirements, and performance thresholds
+- **Autonomous Self-Modification**: System analyzes its own performance and proposes code changes to improve training
+- **Quality Gates with Auto-Merge**: All self-modifications must pass tests, coverage, and performance thresholds - **approved changes are automatically deployed**
 - **Automated Training**: GitHub Actions workflows train the model every 6 hours without manual intervention
 - **Progressive Complexity**: Synthetic data generation with increasing difficulty levels
 - **External Data Integration**: API calls to fetch real-world data for training augmentation
 - **Colab Integration**: Jupyter notebook for extended training sessions with automatic GitHub synchronization
 - **Persistent Evolution**: Every training session builds on previous weights, creating continuous improvement
 - **CI/CD Testing**: Comprehensive test suite ensures modifications don't degrade performance
+- **Zero Human Intervention**: Successful modifications are automatically merged and deployed
 - **Weekly Evaluation**: Automated performance reports generated and posted as GitHub Issues
 
 ## 🏗️ Architecture
@@ -27,15 +28,16 @@ A novel self-improving machine learning system that continuously evolves through
 2. **DataGenerator**: Creates increasingly complex synthetic datasets and fetches external data
 3. **TrainingManager**: Orchestrates training loops, checkpointing, and architectural evolution
 4. **SelfModifier**: Analyzes performance and proposes code modifications with confidence scores
-5. **Quality Gate Pipeline**: CI/CD system that validates all changes before approval
+5. **Quality Gate Pipeline**: CI/CD system that validates and auto-merges approved changes
 6. **Threshold Checker**: Ensures performance, coverage, and code quality standards are met
+7. **Post-Merge Training**: Automatically trains with new modifications after deployment
 
-### Self-Modification Process
+### Autonomous Self-Modification Flow
 
 ```
 Train → Analyze Performance → Detect Stagnation → Propose Modification
                                                            ↓
-                                                    Create PR with Changes
+                                                  Create PR with Changes
                                                            ↓
                                             Run Quality Gate Checks:
                                             - Unit tests (must pass)
@@ -46,9 +48,15 @@ Train → Analyze Performance → Detect Stagnation → Propose Modification
                                             ┌──────────────┴──────────────┐
                                         PASS                            FAIL
                                             ↓                               ↓
-                                    Auto-merge PR                    Block merge
-                                            ↓                         Post reasons
-                                    Continue training              Human review
+                                    Auto-approve PR                  Block merge
+                                            ↓                         Add labels
+                                    Auto-merge to main             Require human
+                                            ↓                          review
+                                    Post-merge training                 ↓
+                                            ↓                    Manual intervention
+                                    Create success issue
+                                            ↓
+                                    Continue evolution
 ```
 
 ## 📦 Installation
@@ -88,7 +96,7 @@ python train.py
   - Creates PR with proposed changes if stagnating
   - Commits weights directly if performing well
 
-#### Quality Gate (`quality-gate.yml`)
+#### Quality Gate (`quality-gate.yml`) - **WITH AUTO-MERGE**
 - **Triggers**: Pull requests to `main`
 - **Required Checks**:
   - ✅ All unit tests pass
@@ -100,7 +108,17 @@ python train.py
   - Runs complete test suite with coverage
   - Validates model performance on fresh data
   - Posts detailed report to PR
-  - Blocks merge if any check fails
+  - **If all checks pass**: Auto-approves and auto-merges PR immediately
+  - **If any check fails**: Blocks merge and adds labels for human review
+
+#### Post-Merge Training (`post-merge-training.yml`) - **NEW**
+- **Triggers**: Push to `main` (after auto-merge)
+- **Actions**:
+  - Detects if merge was from self-modification
+  - Runs validation tests with new code
+  - Trains model with implemented modifications
+  - Commits training results
+  - Creates GitHub Issue documenting successful deployment
 
 #### Evaluation (`evaluate.yml`)
 - **Schedule**: Weekly on Sundays
@@ -122,12 +140,20 @@ python train.py
 - **Training**: Learning rate schedules, optimization strategies
 - **Tests**: Automatically generates tests for new architectures
 
-**Quality Requirements**
-- All existing tests must pass
+**Auto-Merge Criteria**
+- All existing tests must pass (100%)
 - Test coverage maintained at ≥80%
 - Model performance cannot degrade >2x from best
-- No critical code quality issues (syntax errors, undefined variables)
-- Changes must improve expected performance by ≥10%
+- No critical code quality issues
+- PR created by `github-actions[bot]` (self-modifications only)
+
+**What happens after auto-merge?**
+1. PR is squash-merged to main with detailed commit message
+2. Labels added: `auto-merged`, `self-modification-success`
+3. Post-merge workflow triggers immediately
+4. Model trains with new modifications
+5. Success issue created documenting deployment
+6. System continues evolution with improved code
 
 ## 📊 Model Features
 
@@ -135,6 +161,7 @@ python train.py
 - **Initial**: 3 hidden layers [64, 128, 64]
 - **Evolution**: Layers expand by 20% when performance plateaus
 - **Self-Modification**: Adds layers or changes training strategy when stagnation detected
+- **Auto-Deployment**: Approved changes merged and trained automatically
 - **Dropout**: 0.2 for regularization
 - **Activation**: ReLU with adaptive learning rate
 
@@ -151,7 +178,7 @@ python train.py
 - Training cycles completed
 - Current complexity level
 - Architecture parameters
-- Self-modification attempts and success rate
+- Self-modification attempts and auto-merge success rate
 
 ## 📈 Monitoring Progress
 
@@ -173,7 +200,8 @@ Metrics are stored in `metrics.json`:
 [View workflow runs](https://github.com/Tommaso-R-Marena/AutoEvolve-ML/actions) to see:
 - Training progress and loss curves
 - Self-modification proposals and decisions
-- Quality gate results
+- Quality gate results with auto-merge status
+- Post-merge training results
 - Test coverage reports
 
 ### Self-Modification PRs
@@ -184,6 +212,15 @@ When the system proposes changes, it creates a PR with:
 - Expected improvement percentage
 - Auto-generated tests for changes
 - Quality gate status
+- **Auto-merge notification if approved**
+
+### Deployment Issues
+
+After successful auto-merge, a GitHub Issue is created documenting:
+- What modifications were deployed
+- Post-merge training results
+- Performance metrics
+- Timestamp of deployment
 
 ### Running Tests Locally
 
@@ -232,6 +269,16 @@ if coverage >= 80:  # Adjust this value
 
 # Performance degradation limit
 if current_loss < best_loss * 2.0:  # Adjust multiplier
+```
+
+### Disable Auto-Merge (Require Manual Approval)
+
+If you want to review PRs before merging, comment out the auto-merge steps in `.github/workflows/quality-gate.yml`:
+
+```yaml
+# Comment out these steps to require manual merge:
+# - name: Auto-approve PR if quality gate passes
+# - name: Auto-merge PR if quality gate passes
 ```
 
 ### Add Custom Self-Modifications
@@ -300,11 +347,25 @@ print(predictions)
 
 ## 🎯 Use Cases
 
-- **Research**: Study self-improving ML systems and code evolution
-- **AutoML**: Automated architecture search with safety guarantees
-- **CI/CD for ML**: Learn best practices for testing ML systems
-- **Education**: Understand quality gates and testing requirements for production ML
-- **Experimentation**: Framework for testing self-evolution strategies with constraints
+- **Research**: Study autonomous ML systems and code evolution without human intervention
+- **AutoML**: Automated architecture search with safety guarantees and instant deployment
+- **CI/CD for ML**: Learn best practices for testing and deploying ML systems automatically
+- **Education**: Understand quality gates and autonomous deployment for production ML
+- **Experimentation**: Framework for testing self-evolution strategies with zero-touch deployment
+- **Production ML Ops**: Template for building self-healing ML systems
+
+## 🛡️ Safety Features
+
+### Multi-Layer Protection
+
+1. **Stagnation Detection**: Changes only proposed when necessary (improvement <5% over 10 cycles)
+2. **Confidence Thresholds**: Modifications require ≥70% confidence score
+3. **Performance Bounds**: New code cannot cause >2x performance degradation
+4. **Test Requirements**: All modifications must include tests and maintain 80% coverage
+5. **Auto-Merge Gate**: Only PRs from `github-actions[bot]` that pass all checks are auto-merged
+6. **Post-Merge Validation**: Immediate training after merge validates modifications work in production
+7. **Human Override**: Failed checks require manual review, preventing harmful changes
+8. **Audit Trail**: All modifications documented in PRs, commits, and issues
 
 ## 🤝 Contributing
 
@@ -316,6 +377,7 @@ Contributions welcome! Areas for enhancement:
 - Integration with external datasets and APIs
 - Advanced testing strategies (property-based testing, adversarial validation)
 - Distributed training with quality gates
+- Rollback mechanisms for unsuccessful modifications
 
 ## 📝 License
 
@@ -330,7 +392,10 @@ MIT License - feel free to use and modify for your projects.
 
 ---
 
-**Built with ❤️ for safe, autonomous ML systems**
+**Built with ❤️ for autonomous, self-evolving ML systems**
 
 *Last auto-trained: Check [Actions](https://github.com/Tommaso-R-Marena/AutoEvolve-ML/actions) for latest run*
-*Self-modifications proposed: Check [Pull Requests](https://github.com/Tommaso-R-Marena/AutoEvolve-ML/pulls) for pending changes*
+
+*Self-modifications: Check [Pull Requests](https://github.com/Tommaso-R-Marena/AutoEvolve-ML/pulls) for pending changes*
+
+*Deployed modifications: Check [Issues](https://github.com/Tommaso-R-Marena/AutoEvolve-ML/issues?q=label%3Adeployed) for deployment history*

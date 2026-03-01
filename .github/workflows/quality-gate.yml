@@ -14,9 +14,10 @@ jobs:
       pull-requests: write
     
     steps:
-    - name: Checkout repository
+    - name: Checkout PR branch
       uses: actions/checkout@v4
       with:
+        ref: ${{ github.event.pull_request.head.ref }}
         fetch-depth: 0
     
     - name: Set up Python
@@ -36,7 +37,6 @@ jobs:
       run: |
         echo "Running quality checks..."
         python -m pytest tests/ -v --cov=. --cov-report=json --cov-report=term
-        echo "COVERAGE=$(python -c \"import json; print(json.load(open('coverage.json'))['totals']['percent_covered'])\")"
         
         # Code formatting check
         black --check . || echo "FORMAT_ISSUES=true" >> $GITHUB_ENV
@@ -50,8 +50,11 @@ jobs:
         python validate_model.py
         
     - name: Check quality thresholds
+      id: thresholds
       run: |
         python check_thresholds.py
+        echo "QUALITY_CHECK_EXIT=$?" >> $GITHUB_OUTPUT
+      continue-on-error: true
     
     - name: Post results to PR
       if: github.event_name == 'pull_request'
@@ -59,11 +62,17 @@ jobs:
       with:
         script: |
           const fs = require('fs');
+          
+          if (!fs.existsSync('quality_report.json')) {
+            console.log('Quality report not found, skipping comment');
+            return;
+          }
+          
           const results = JSON.parse(fs.readFileSync('quality_report.json', 'utf8'));
           
           let comment = `## 🤖 Self-Modification Quality Gate\n\n`;
           comment += `### Performance Metrics\n`;
-          comment += `- **Validation Loss**: ${results.val_loss.toFixed(4)} (Threshold: ${results.threshold_val_loss})\n`;
+          comment += `- **Validation Loss**: ${results.val_loss.toFixed(4)} (Threshold: ${results.threshold_val_loss.toFixed(4)})\n`;
           comment += `- **Performance Change**: ${results.performance_change > 0 ? '+' : ''}${(results.performance_change * 100).toFixed(2)}%\n`;
           comment += `- **Test Coverage**: ${results.coverage.toFixed(1)}% (Minimum: 80%)\n`;
           comment += `- **Tests Passing**: ${results.tests_passed}/${results.tests_total}\n\n`;
@@ -73,9 +82,12 @@ jobs:
           comment += `\n\n`;
           
           if (results.approved) {
-            comment += `### ✅ APPROVED\n\nAll quality gates passed. This modification improves the model and maintains code quality.`;
+            comment += `### ✅ APPROVED - AUTO-MERGING\n\nAll quality gates passed. This modification improves the model and maintains code quality.\n\n`;
+            comment += `**This PR will be automatically merged and the changes will be deployed immediately.**`;
           } else {
-            comment += `### ❌ BLOCKED\n\nThis modification does not meet quality thresholds:\n${results.failure_reasons.join('\n')}`;
+            comment += `### ❌ BLOCKED\n\nThis modification does not meet quality thresholds:\n`;
+            comment += results.failure_reasons.map(r => `- ${r}`).join('\n');
+            comment += `\n\n**Human review required before merging.**`;
           }
           
           await github.rest.issues.createComment({
@@ -85,16 +97,75 @@ jobs:
             body: comment
           });
     
+    - name: Auto-approve PR if quality gate passes
+      if: steps.thresholds.outputs.QUALITY_CHECK_EXIT == '0' && github.event.pull_request.user.login == 'github-actions[bot]'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          await github.rest.pulls.createReview({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_request_number: context.issue.number,
+            event: 'APPROVE',
+            body: '✅ Quality gates passed. Auto-approving self-modification.'
+          });
+          console.log('PR approved');
+    
+    - name: Auto-merge PR if quality gate passes
+      if: steps.thresholds.outputs.QUALITY_CHECK_EXIT == '0' && github.event.pull_request.user.login == 'github-actions[bot]'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const fs = require('fs');
+          const results = JSON.parse(fs.readFileSync('quality_report.json', 'utf8'));
+          
+          try {
+            await github.rest.pulls.merge({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_request_number: context.issue.number,
+              merge_method: 'squash',
+              commit_title: `🤖 Auto-merge: Self-modification approved`,
+              commit_message: `Quality gate results:\n- Tests: ${results.tests_passed}/${results.tests_total} passed\n- Coverage: ${results.coverage.toFixed(1)}%\n- Performance: ${results.performance_change > 0 ? '+' : ''}${(results.performance_change * 100).toFixed(2)}% change\n\nAll thresholds met. Automatically merged.`
+            });
+            console.log('✅ PR successfully merged');
+            
+            // Add success label
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['auto-merged', 'self-modification-success']
+            });
+          } catch (error) {
+            console.error('Merge failed:', error.message);
+            
+            // Comment on PR about merge failure
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `⚠️ Quality gates passed but auto-merge failed: ${error.message}\n\nPlease merge manually or check for conflicts.`
+            });
+          }
+    
     - name: Block merge if quality gate fails
+      if: steps.thresholds.outputs.QUALITY_CHECK_EXIT != '0'
       run: |
-        if [ ! -f "quality_report.json" ]; then
-          echo "Quality report not found"
-          exit 1
-        fi
-        
-        APPROVED=$(python -c "import json; print(json.load(open('quality_report.json'))['approved'])")
-        if [ "$APPROVED" != "True" ]; then
-          echo "❌ Quality gate failed - blocking merge"
-          exit 1
-        fi
-        echo "✅ Quality gate passed"
+        echo "❌ Quality gate failed - blocking merge"
+        exit 1
+    
+    - name: Add failure labels
+      if: failure() && github.event.pull_request.user.login == 'github-actions[bot]'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          await github.rest.issues.addLabels({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            labels: ['quality-gate-failed', 'needs-review']
+          });

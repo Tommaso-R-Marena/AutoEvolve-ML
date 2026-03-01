@@ -1,0 +1,100 @@
+name: Post-Merge Training
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  train-after-merge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Check if merge was from self-modification
+      id: check_merge
+      run: |
+        COMMIT_MSG=$(git log -1 --pretty=%B)
+        if [[ "$COMMIT_MSG" == *"Auto-merge: Self-modification"* ]]; then
+          echo "SELF_MODIFICATION=true" >> $GITHUB_OUTPUT
+          echo "This was a self-modification merge"
+        else
+          echo "SELF_MODIFICATION=false" >> $GITHUB_OUTPUT
+          echo "Regular commit"
+        fi
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest
+    
+    - name: Run post-merge tests
+      if: steps.check_merge.outputs.SELF_MODIFICATION == 'true'
+      run: |
+        echo "Running validation tests after self-modification..."
+        python -m pytest tests/ -v
+    
+    - name: Train with new modifications
+      if: steps.check_merge.outputs.SELF_MODIFICATION == 'true'
+      run: |
+        echo "Training with newly implemented modifications..."
+        python train.py
+    
+    - name: Commit training results
+      if: steps.check_merge.outputs.SELF_MODIFICATION == 'true'
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add model_checkpoint.pth metrics.json
+        git diff --staged --quiet || git commit -m "Post-merge training: First training with self-modifications [$(date +'%Y-%m-%d %H:%M:%S UTC')]"
+        git push
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Create success issue
+      if: steps.check_merge.outputs.SELF_MODIFICATION == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          
+          let history = {loss: [], val_loss: []};
+          if (fs.existsSync('metrics.json')) {
+            history = JSON.parse(fs.readFileSync('metrics.json', 'utf8'));
+          }
+          
+          const issueBody = `## 🎉 Self-Modification Successfully Deployed\n\n` +
+            `A self-modification PR was automatically merged after passing all quality gates.\n\n` +
+            `### Post-Merge Training Results\n` +
+            `- **Latest training loss**: ${history.loss[history.loss.length - 1]?.toFixed(4) || 'N/A'}\n` +
+            `- **Latest validation loss**: ${history.val_loss[history.val_loss.length - 1]?.toFixed(4) || 'N/A'}\n` +
+            `- **Total training cycles**: ${history.loss.length}\n\n` +
+            `### Next Steps\n` +
+            `- Model will continue training with the new modifications\n` +
+            `- Performance will be monitored over the next several cycles\n` +
+            `- If improvements are realized, the system may propose additional refinements\n\n` +
+            `---\n` +
+            `*Automated self-modification deployed at ${new Date().toISOString()}*`;
+          
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `✅ Self-Modification Deployed: ${new Date().toISOString().split('T')[0]}`,
+            body: issueBody,
+            labels: ['self-modification', 'deployed', 'automated']
+          });
