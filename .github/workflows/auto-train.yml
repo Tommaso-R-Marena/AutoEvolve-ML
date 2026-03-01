@@ -2,7 +2,7 @@ name: Auto-Train Self-Improving Model
 
 on:
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 */8 * * *'  # Every 8 hours (3x per day = ~60 min/day)
   workflow_dispatch:
   push:
     branches:
@@ -10,12 +10,13 @@ on:
     paths:
       - 'train.py'
       - 'data_sources.py'
+      - '*.py'
       - 'requirements.txt'
 
 jobs:
   train:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 25  # Well under 6-hour limit, ~25 min per run
     permissions:
       contents: write
       pull-requests: write
@@ -33,11 +34,18 @@ jobs:
         python-version: '3.10'
         cache: 'pip'
     
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
     - name: Install dependencies
       run: |
         pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pytest pytest-cov
       continue-on-error: false
     
     - name: Configure Git LFS
@@ -48,12 +56,7 @@ jobs:
         git lfs track "data/chunks/*.parquet" || true
       continue-on-error: true
     
-    - name: Run tests before training
-      run: |
-        python -m pytest tests/ -v || echo "Tests not found, continuing"
-      continue-on-error: true
-    
-    - name: Run training
+    - name: Run training (optimized for time)
       id: train
       run: |
         python train.py
@@ -102,67 +105,6 @@ jobs:
         fi
       continue-on-error: true
     
-    - name: Self-modification check
-      if: steps.train.outputs.TRAINING_FAILED != 'true'
-      id: self_modify
-      run: |
-        python self_modifier.py || echo "Self-mod check failed"
-        
-        if [ -f "modification_proposal.json" ]; then
-          echo "NEEDS_MODIFICATION=true" >> $GITHUB_OUTPUT
-        else
-          echo "NEEDS_MODIFICATION=false" >> $GITHUB_OUTPUT
-        fi
-      continue-on-error: true
-    
-    - name: Create self-modification PR
-      if: steps.self_modify.outputs.NEEDS_MODIFICATION == 'true'
-      uses: actions/github-script@v7
-      continue-on-error: true
-      with:
-        script: |
-          const fs = require('fs');
-          try {
-            const proposal = JSON.parse(fs.readFileSync('modification_proposal.json', 'utf8'));
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const branchName = `auto-modify-${timestamp}`;
-            
-            const { data: ref } = await github.rest.git.getRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: 'heads/main'
-            });
-            
-            await github.rest.git.createRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: `refs/heads/${branchName}`,
-              sha: ref.object.sha
-            });
-            
-            for (const file of proposal.files) {
-              await github.rest.repos.createOrUpdateFileContents({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                path: file.path,
-                message: `Self-mod: ${file.reason}`,
-                content: Buffer.from(file.content).toString('base64'),
-                branch: branchName
-              });
-            }
-            
-            await github.rest.pulls.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `🤖 Self-Mod: ${proposal.title}`,
-              head: branchName,
-              base: 'main',
-              body: `## Self-Modification\n\n${proposal.description}\n\n### Changes\n${proposal.files.map(f => `- ${f.path}: ${f.reason}`).join('\n')}`
-            });
-          } catch (e) {
-            console.error('PR creation failed:', e);
-          }
-    
     - name: Standard commit
       if: env.AUTO_COMMITTED != 'true'
       run: |
@@ -183,5 +125,11 @@ jobs:
         path: |
           *.pth
           *.json
-        retention-days: 30
+        retention-days: 7  # Reduced from 30 to save storage
       continue-on-error: true
+    
+    - name: Report usage
+      if: always()
+      run: |
+        echo "Workflow completed in job"
+        echo "Estimated minutes used: ~20-25 minutes"

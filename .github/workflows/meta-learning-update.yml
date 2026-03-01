@@ -1,0 +1,91 @@
+name: Meta-Learning Update (Daily)
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # Daily at 3 AM
+  workflow_dispatch:
+
+jobs:
+  meta-update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install minimal dependencies
+      run: |
+        pip install numpy
+    
+    - name: Analyze meta-learning performance
+      run: |
+        python -c "
+import sys
+import json
+import os
+sys.path.insert(0, '.')
+
+try:
+    from meta_learning import MetaLearner
+    
+    ml = MetaLearner()
+    ml.load_meta_knowledge()
+    
+    if ml.learning_history:
+        print(f'Loaded {len(ml.learning_history)} learning episodes')
+        
+        # Get best strategy
+        best_strategy = ml.recommend_strategy()
+        print(f'Best strategy: {best_strategy}')
+        
+        # Get hyperparameter recommendations
+        params = ml.recommend_hyperparameters()
+        print(f'Recommended hyperparameters: {params}')
+        
+        # Save summary report
+        report = {
+            'total_episodes': len(ml.learning_history),
+            'best_strategy': best_strategy,
+            'recommended_params': params,
+            'strategy_performance': ml.strategy_performance
+        }
+        
+        with open('meta_learning_report.json', 'w') as f:
+            json.dump(report, f, indent=2)
+        
+        print('Meta-learning report generated')
+    else:
+        print('No meta-learning history yet')
+except Exception as e:
+    print(f'Meta-learning analysis skipped: {e}')
+"
+    
+    - name: Commit meta-learning report
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add meta_learning_report.json || true
+        git diff --staged --quiet || git commit -m "Meta-learning: Daily update [$(date +'%Y-%m-%d')]" || true
+        git push || true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      continue-on-error: true

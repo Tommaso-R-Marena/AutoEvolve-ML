@@ -1,0 +1,83 @@
+name: Resource Monitor (Monthly)
+
+on:
+  schedule:
+    - cron: '0 5 1 * *'  # First day of each month at 5 AM
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+    
+    - name: Calculate resource usage
+      id: usage
+      run: |
+        # Estimate monthly usage
+        # Training: 3 runs/day × 25 min = 75 min/day = 2,250 min/month
+        # NAS: 4 runs/month × 45 min = 180 min/month
+        # Meta-learning: 30 runs/month × 10 min = 300 min/month
+        # Research: 4 runs/month × 10 min = 40 min/month
+        # Total: ~2,770 min/month (well under 3,000 for Pro, under 2,000 for Free with optimization)
+        
+        TRAINING_MINS=2250
+        NAS_MINS=180
+        META_MINS=300
+        RESEARCH_MINS=40
+        TOTAL=$((TRAINING_MINS + NAS_MINS + META_MINS + RESEARCH_MINS))
+        
+        echo "TOTAL_MINUTES=$TOTAL" >> $GITHUB_OUTPUT
+        
+        # Calculate storage (estimate)
+        if [ -d "data/chunks" ]; then
+          STORAGE_MB=$(du -sm data/chunks 2>/dev/null | cut -f1 || echo "0")
+        else
+          STORAGE_MB=0
+        fi
+        
+        echo "STORAGE_MB=$STORAGE_MB" >> $GITHUB_OUTPUT
+        
+        echo "Estimated monthly minutes: $TOTAL"
+        echo "Current storage: ${STORAGE_MB}MB"
+    
+    - name: Create resource report issue
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const totalMinutes = parseInt('${{ steps.usage.outputs.TOTAL_MINUTES }}');
+          const storageMB = parseInt('${{ steps.usage.outputs.STORAGE_MB }}');
+          
+          const freeLimit = 2000;
+          const proLimit = 3000;
+          const freeStorage = 500;
+          const proStorage = 1000;
+          
+          let status = '✅ SAFE';
+          let recommendation = 'Current usage is within limits.';
+          
+          if (totalMinutes > freeLimit) {
+            status = '⚠️ WARNING';
+            recommendation = 'Usage exceeds GitHub Free tier (2,000 min). Consider:\n- GitHub Pro ($4/mo for 3,000 min)\n- Reduce training frequency\n- Optimize training time';
+          }
+          
+          if (storageMB > freeStorage) {
+            status = '⚠️ WARNING';
+            recommendation += '\n- Storage exceeds Free tier (500MB). Consider Git LFS cleanup or GitHub Pro.';
+          }
+          
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `${status} Monthly Resource Report - ${new Date().toISOString().slice(0, 7)}`,
+            body: `## Monthly Resource Usage Report\n\n### GitHub Actions Minutes\n- **Estimated Monthly Usage**: ${totalMinutes} minutes\n- **GitHub Free Limit**: 2,000 minutes/month\n- **GitHub Pro Limit**: 3,000 minutes/month\n\n#### Breakdown:\n- Training (3x/day): ~2,250 min/month\n- Architecture Search (weekly): ~180 min/month\n- Meta-Learning (daily): ~300 min/month\n- Research Reports (weekly): ~40 min/month\n\n### Storage\n- **Current Usage**: ${storageMB} MB\n- **GitHub Free Limit**: 500 MB\n- **GitHub Pro Limit**: 1,000 MB\n\n### Status: ${status}\n\n${recommendation}\n\n---\n### Optimization Options\n1. **Reduce frequency**: Change cron from every 8h to every 12h (saves 750 min/month)\n2. **Shorter training**: Reduce epochs from 100 to 50 (saves 1,125 min/month)\n3. **Disable NAS**: Skip architecture search (saves 180 min/month)\n4. **GitHub Pro**: $4/month for 3,000 minutes + 1GB storage\n\n*Automated resource monitoring*`,
+            labels: ['monitoring', 'resources']
+          });
+      continue-on-error: true
