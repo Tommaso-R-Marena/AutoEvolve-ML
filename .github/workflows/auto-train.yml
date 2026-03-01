@@ -1,0 +1,59 @@
+name: Auto-Train Self-Improving Model
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'train.py'
+      - 'requirements.txt'
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run training
+      run: |
+        python train.py
+    
+    - name: Commit and push model weights
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add model_checkpoint.pth metrics.json
+        git diff --staged --quiet || git commit -m "Auto-train: Update model weights [$(date +'%Y-%m-%d %H:%M:%S UTC')]"
+        git push
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Upload training artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: training-results-${{ github.run_number }}
+        path: |
+          model_checkpoint.pth
+          metrics.json
+        retention-days: 30

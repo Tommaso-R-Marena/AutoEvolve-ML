@@ -1,0 +1,44 @@
+name: Model Evaluation & Reporting
+
+on:
+  schedule:
+    - cron: '0 12 * * 0'  # Weekly on Sunday at noon UTC
+  workflow_dispatch:
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+    
+    - name: Generate evaluation report
+      run: python evaluate.py
+    
+    - name: Create evaluation issue
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const report = fs.readFileSync('evaluation_report.md', 'utf8');
+          
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: `Weekly Model Evaluation - ${new Date().toISOString().split('T')[0]}`,
+            body: report,
+            labels: ['evaluation', 'automated']
+          });
