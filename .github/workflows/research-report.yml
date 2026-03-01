@@ -32,7 +32,7 @@ jobs:
     - name: Generate research report
       id: report
       run: |
-        python -c "
+        cat > research_gen.py << 'PYTHON_SCRIPT'
 import sys
 import json
 import os
@@ -50,30 +50,28 @@ try:
     with open('weekly_research_report.json', 'w') as f:
         json.dump(report, f, indent=2)
     
-    print(f'BREAKTHROUGHS={report.get(\"breakthroughs\", 0)}' >> '$GITHUB_OUTPUT')
-    print(f'EXPERIMENTS={report.get(\"total_experiments\", 0)}' >> '$GITHUB_OUTPUT')
+    with open('report_metrics.txt', 'w') as f:
+        f.write(f"BREAKTHROUGHS={report.get('breakthroughs', 0)}\n")
+        f.write(f"EXPERIMENTS={report.get('total_experiments', 0)}\n")
     
     print('Research report generated')
-    print(f'Total experiments: {report.get(\"total_experiments\", 0)}')
-    print(f'Breakthroughs: {report.get(\"breakthroughs\", 0)}')
+    print(f"Total experiments: {report.get('total_experiments', 0)}")
+    print(f"Breakthroughs: {report.get('breakthroughs', 0)}")
 except Exception as e:
     print(f'Research report skipped: {e}')
-    print('BREAKTHROUGHS=0' >> '$GITHUB_OUTPUT')
-    print('EXPERIMENTS=0' >> '$GITHUB_OUTPUT')
-" 2>&1 | tee report_output.txt
+    with open('report_metrics.txt', 'w') as f:
+        f.write("BREAKTHROUGHS=0\n")
+        f.write("EXPERIMENTS=0\n")
+PYTHON_SCRIPT
         
-        # Extract outputs from file
-        if grep -q 'BREAKTHROUGHS=' report_output.txt; then
-          grep 'BREAKTHROUGHS=' report_output.txt | cut -d'=' -f2 > /tmp/breakthroughs
-          echo "BREAKTHROUGHS=$(cat /tmp/breakthroughs)" >> $GITHUB_OUTPUT
+        python research_gen.py
+        
+        if [ -f report_metrics.txt ]; then
+          while IFS='=' read -r key value; do
+            echo "$key=$value" >> $GITHUB_OUTPUT
+          done < report_metrics.txt
         else
           echo "BREAKTHROUGHS=0" >> $GITHUB_OUTPUT
-        fi
-        
-        if grep -q 'EXPERIMENTS=' report_output.txt; then
-          grep 'EXPERIMENTS=' report_output.txt | cut -d'=' -f2 > /tmp/experiments
-          echo "EXPERIMENTS=$(cat /tmp/experiments)" >> $GITHUB_OUTPUT
-        else
           echo "EXPERIMENTS=0" >> $GITHUB_OUTPUT
         fi
     

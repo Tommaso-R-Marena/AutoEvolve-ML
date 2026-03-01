@@ -44,13 +44,14 @@ jobs:
     
     - name: Run architecture search
       run: |
-        python -c "
+        cat > nas_eval.py << 'PYTHON_SCRIPT'
 import sys
 sys.path.insert(0, '.')
 from architecture_search import NeuralArchitectureSearch
 from train import SelfImprovingModel
 import torch
 import numpy as np
+import os
 
 nas = NeuralArchitectureSearch()
 nas.load_search_state()
@@ -58,12 +59,13 @@ nas.load_search_state()
 base_arch = [64, 128, 64]
 candidates = nas.generate_candidate_architectures(base_arch, n_candidates=3)
 
+arch_type = os.environ.get('ARCH_TYPE', 'wider')
+
 for name, arch in candidates:
-    if name == '${{ matrix.architecture_type }}':
+    if name == arch_type:
         print(f'Testing {name}: {arch}')
         model = SelfImprovingModel(hidden_sizes=arch)
         
-        # Quick synthetic evaluation
         X = torch.randn(100, 10)
         y = torch.randn(100, 1)
         
@@ -77,7 +79,9 @@ for name, arch in candidates:
 
 nas.save_search_state()
 print(f'Best architecture so far: {nas.get_best_architecture()}')
-"
+PYTHON_SCRIPT
+        
+        ARCH_TYPE=${{ matrix.architecture_type }} python nas_eval.py
     
     - name: Commit NAS results
       run: |

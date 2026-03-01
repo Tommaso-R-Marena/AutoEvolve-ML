@@ -38,7 +38,7 @@ jobs:
     
     - name: Analyze meta-learning performance
       run: |
-        python -c "
+        cat > meta_analyze.py << 'PYTHON_SCRIPT'
 import sys
 import json
 import os
@@ -53,15 +53,12 @@ try:
     if ml.learning_history:
         print(f'Loaded {len(ml.learning_history)} learning episodes')
         
-        # Get best strategy
         best_strategy = ml.recommend_strategy()
         print(f'Best strategy: {best_strategy}')
         
-        # Get hyperparameter recommendations
         params = ml.recommend_hyperparameters()
         print(f'Recommended hyperparameters: {params}')
         
-        # Save summary report
         report = {
             'total_episodes': len(ml.learning_history),
             'best_strategy': best_strategy,
@@ -77,7 +74,9 @@ try:
         print('No meta-learning history yet')
 except Exception as e:
     print(f'Meta-learning analysis skipped: {e}')
-"
+PYTHON_SCRIPT
+        
+        python meta_analyze.py
     
     - name: Commit meta-learning report
       run: |
