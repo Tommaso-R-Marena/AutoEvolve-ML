@@ -1,0 +1,100 @@
+name: Quality Gate & Self-Modification
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov black flake8 pylint
+    
+    - name: Run code quality checks
+      id: quality
+      run: |
+        echo "Running quality checks..."
+        python -m pytest tests/ -v --cov=. --cov-report=json --cov-report=term
+        echo "COVERAGE=$(python -c \"import json; print(json.load(open('coverage.json'))['totals']['percent_covered'])\")"
+        
+        # Code formatting check
+        black --check . || echo "FORMAT_ISSUES=true" >> $GITHUB_ENV
+        
+        # Linting
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+    
+    - name: Validate model performance
+      id: performance
+      run: |
+        python validate_model.py
+        
+    - name: Check quality thresholds
+      run: |
+        python check_thresholds.py
+    
+    - name: Post results to PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          const results = JSON.parse(fs.readFileSync('quality_report.json', 'utf8'));
+          
+          let comment = `## 🤖 Self-Modification Quality Gate\n\n`;
+          comment += `### Performance Metrics\n`;
+          comment += `- **Validation Loss**: ${results.val_loss.toFixed(4)} (Threshold: ${results.threshold_val_loss})\n`;
+          comment += `- **Performance Change**: ${results.performance_change > 0 ? '+' : ''}${(results.performance_change * 100).toFixed(2)}%\n`;
+          comment += `- **Test Coverage**: ${results.coverage.toFixed(1)}% (Minimum: 80%)\n`;
+          comment += `- **Tests Passing**: ${results.tests_passed}/${results.tests_total}\n\n`;
+          
+          comment += `### Quality Checks\n`;
+          comment += results.checks.map(c => `- ${c.passed ? '✅' : '❌'} ${c.name}: ${c.message}`).join('\n');
+          comment += `\n\n`;
+          
+          if (results.approved) {
+            comment += `### ✅ APPROVED\n\nAll quality gates passed. This modification improves the model and maintains code quality.`;
+          } else {
+            comment += `### ❌ BLOCKED\n\nThis modification does not meet quality thresholds:\n${results.failure_reasons.join('\n')}`;
+          }
+          
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: comment
+          });
+    
+    - name: Block merge if quality gate fails
+      run: |
+        if [ ! -f "quality_report.json" ]; then
+          echo "Quality report not found"
+          exit 1
+        fi
+        
+        APPROVED=$(python -c "import json; print(json.load(open('quality_report.json'))['approved'])")
+        if [ "$APPROVED" != "True" ]; then
+          echo "❌ Quality gate failed - blocking merge"
+          exit 1
+        fi
+        echo "✅ Quality gate passed"
