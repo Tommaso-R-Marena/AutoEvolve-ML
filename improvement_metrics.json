@@ -1,7 +1,7 @@
 {
-  "improvement_percentage": 5.821844272832651,
-  "current_val_loss": 0.5905644297599792,
+  "improvement_percentage": 0.0,
+  "current_val_loss": 0.6481056809425354,
   "best_val_loss": 0.43500593304634094,
-  "cycle": 5,
-  "timestamp": "2026-03-02T08:44:02.464003"
+  "cycle": 6,
+  "timestamp": "2026-03-02T16:44:23.707941"
 }

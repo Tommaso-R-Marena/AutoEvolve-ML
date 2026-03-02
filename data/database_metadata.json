@@ -1,6 +1,6 @@
 {
-  "total_samples": 30000,
-  "total_chunks": 6,
+  "total_samples": 35000,
+  "total_chunks": 7,
   "chunk_files": [
     {
       "filename": "chunk_000000.parquet",
@@ -43,8 +43,15 @@
       "size_bytes": 447678,
       "cycle": 5,
       "timestamp": "2026-03-02T08:43:59.764945"
+    },
+    {
+      "filename": "chunk_000006.parquet",
+      "samples": 5000,
+      "size_bytes": 447611,
+      "cycle": 6,
+      "timestamp": "2026-03-02T16:44:20.378725"
     }
   ],
   "created_at": "2026-03-01T09:05:45.727161",
-  "last_updated": "2026-03-02T08:43:59.764951"
+  "last_updated": "2026-03-02T16:44:20.378733"
 }

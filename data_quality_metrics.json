@@ -1,10 +1,10 @@
 [
   {
-    "timestamp": "2026-03-02T08:43:59.746091",
+    "timestamp": "2026-03-02T16:44:20.359285",
     "n_samples": 5000,
     "feature_diversity": 1.0,
-    "target_variance": 0.9226098392816453,
-    "feature_correlations": 0.02800666815069406,
+    "target_variance": 0.701521901130895,
+    "feature_correlations": 0.029531769821144534,
     "complexity_level": 1
   }
 ]
