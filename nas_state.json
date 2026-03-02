@@ -1,5 +1,87 @@
 {
-  "search_history": [],
-  "architecture_performance": {},
-  "last_updated": "2026-03-02T01:58:15.787804"
+  "search_history": [
+    {
+      "architecture": [
+        96,
+        192,
+        96
+      ],
+      "timestamp": "2026-03-02T08:44:02.460151",
+      "loss": Infinity,
+      "val_loss": 3.9073,
+      "params": 38305,
+      "efficiency": 0.00010200496018796502
+    },
+    {
+      "architecture": [
+        64,
+        128,
+        64,
+        64
+      ],
+      "timestamp": "2026-03-02T08:44:02.461118",
+      "loss": Infinity,
+      "val_loss": 2.2145,
+      "params": 21505,
+      "efficiency": 0.00010297605208091143
+    },
+    {
+      "architecture": [
+        128,
+        32,
+        128
+      ],
+      "timestamp": "2026-03-02T08:44:02.461813",
+      "loss": Infinity,
+      "val_loss": 1.0465,
+      "params": 9889,
+      "efficiency": 0.0001058246536555769
+    }
+  ],
+  "architecture_performance": {
+    "[96, 192, 96]": [
+      {
+        "architecture": [
+          96,
+          192,
+          96
+        ],
+        "timestamp": "2026-03-02T08:44:02.460151",
+        "loss": Infinity,
+        "val_loss": 3.9073,
+        "params": 38305,
+        "efficiency": 0.00010200496018796502
+      }
+    ],
+    "[64, 128, 64, 64]": [
+      {
+        "architecture": [
+          64,
+          128,
+          64,
+          64
+        ],
+        "timestamp": "2026-03-02T08:44:02.461118",
+        "loss": Infinity,
+        "val_loss": 2.2145,
+        "params": 21505,
+        "efficiency": 0.00010297605208091143
+      }
+    ],
+    "[128, 32, 128]": [
+      {
+        "architecture": [
+          128,
+          32,
+          128
+        ],
+        "timestamp": "2026-03-02T08:44:02.461813",
+        "loss": Infinity,
+        "val_loss": 1.0465,
+        "params": 9889,
+        "efficiency": 0.0001058246536555769
+      }
+    ]
+  },
+  "last_updated": "2026-03-02T08:44:02.463477"
 }
