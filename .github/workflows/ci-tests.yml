@@ -135,21 +135,28 @@ jobs:
       run: |
         echo "Validating workflow files..."
         FOUND_ERROR=0
-        INLINE_PYTHON_PATTERN='python[[:space:]]+-c[[:space:]]+'
         
         for file in .github/workflows/*.yml; do
           echo "Checking $file"
           
-          if grep -E "$INLINE_PYTHON_PATTERN" "$file" | grep -v "INLINE_PYTHON_PATTERN" > /dev/null; then
+          # Extract content excluding the workflow-validation job itself
+          # This prevents the checker from finding its own patterns
+          sed '/workflow-validation:/,/^  [a-z-]*:/{ /workflow-validation:/!{ /^  [a-z-]*:/!d; }; }' "$file" > /tmp/check_content.txt
+          
+          # Check for inline python -c
+          if grep -q 'python -c' /tmp/check_content.txt 2>/dev/null; then
             echo "❌ ERROR: Found inline python -c in $file (use separate scripts)"
             FOUND_ERROR=1
           fi
           
-          if grep '<<[A-Z_]' "$file" | grep -v "grep" > /dev/null; then
+          # Check for heredoc
+          if grep -q '<<[A-Z_]' /tmp/check_content.txt 2>/dev/null; then
             echo "❌ ERROR: Found heredoc in $file (use separate scripts)"
             FOUND_ERROR=1
           fi
         done
+        
+        rm -f /tmp/check_content.txt
         
         if [ $FOUND_ERROR -eq 1 ]; then
           exit 1
