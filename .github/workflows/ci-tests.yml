@@ -134,17 +134,27 @@ jobs:
     - name: Validate workflow YAML files
       run: |
         echo "Validating workflow files..."
+        FOUND_ERROR=0
         for file in .github/workflows/*.yml; do
           echo "Checking $file"
-          if grep -q "python -c" "$file"; then
+          
+          # Check for inline python calls (excluding grep commands themselves)
+          if grep -v "grep" "$file" | grep -q "python -c"; then
             echo "❌ ERROR: Found inline python -c in $file (use separate scripts)"
-            exit 1
+            FOUND_ERROR=1
           fi
-          if grep -q "<<" "$file"; then
+          
+          # Check for heredoc (excluding grep commands themselves)
+          if grep -v "grep" "$file" | grep -q "<<"; then
             echo "❌ ERROR: Found heredoc in $file (use separate scripts)"
-            exit 1
+            FOUND_ERROR=1
           fi
         done
+        
+        if [ $FOUND_ERROR -eq 1 ]; then
+          exit 1
+        fi
+        
         echo "✅ All workflow files validated"
     
     - name: Check script files exist
