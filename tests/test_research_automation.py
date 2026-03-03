@@ -65,7 +65,8 @@ class TestResearchAutomation:
         
         assert result is not None
         assert result['status'] == 'completed'
-        assert result['improvement'] == 0.1
+        # Use approximate comparison for floating point
+        assert abs(result['improvement'] - 0.1) < 1e-6, f"Expected ~0.1, got {result['improvement']}"
     
     def test_breakthrough_detection(self):
         """Test breakthrough detection"""
@@ -85,3 +86,4 @@ class TestResearchAutomation:
         
         # Should record breakthrough (>5% improvement)
         assert len(ra.breakthroughs) == 1
+        assert ra.breakthroughs[0]['improvement_pct'] >= 5.0
