@@ -135,17 +135,17 @@ jobs:
       run: |
         echo "Validating workflow files..."
         FOUND_ERROR=0
+        INLINE_PYTHON_PATTERN='python[[:space:]]+-c[[:space:]]+'
+        
         for file in .github/workflows/*.yml; do
           echo "Checking $file"
           
-          # Check for inline python calls (excluding grep commands themselves)
-          if grep -v "grep" "$file" | grep -q "python -c"; then
+          if grep -E "$INLINE_PYTHON_PATTERN" "$file" | grep -v "INLINE_PYTHON_PATTERN" > /dev/null; then
             echo "❌ ERROR: Found inline python -c in $file (use separate scripts)"
             FOUND_ERROR=1
           fi
           
-          # Check for heredoc (excluding grep commands themselves)
-          if grep -v "grep" "$file" | grep -q "<<"; then
+          if grep '<<[A-Z_]' "$file" | grep -v "grep" > /dev/null; then
             echo "❌ ERROR: Found heredoc in $file (use separate scripts)"
             FOUND_ERROR=1
           fi
