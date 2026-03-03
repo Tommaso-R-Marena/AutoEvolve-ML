@@ -2,7 +2,7 @@ name: Auto-Train Self-Improving Model
 
 on:
   schedule:
-    - cron: '0 */8 * * *'  # Every 8 hours (3x per day = ~60 min/day)
+    - cron: '0 */8 * * *'
   workflow_dispatch:
   push:
     branches:
@@ -16,7 +16,7 @@ on:
 jobs:
   train:
     runs-on: ubuntu-latest
-    timeout-minutes: 25  # Well under 6-hour limit, ~25 min per run
+    timeout-minutes: 25
     permissions:
       contents: write
       pull-requests: write
@@ -73,7 +73,7 @@ jobs:
         echo "TRAINING_FAILED=false" >> $GITHUB_OUTPUT
         
         if [ -f "improvement_metrics.json" ]; then
-          IMPROVEMENT=$(python -c "import json; data=json.load(open('improvement_metrics.json')); print(data.get('improvement_percentage', 0))" 2>/dev/null || echo "0")
+          IMPROVEMENT=$(python scripts/extract_improvement.py 2>/dev/null || echo "0")
           echo "IMPROVEMENT=$IMPROVEMENT" >> $GITHUB_OUTPUT
           echo "Performance improvement: $IMPROVEMENT%"
         else
@@ -87,7 +87,7 @@ jobs:
         IMPROVEMENT="${{ steps.train.outputs.IMPROVEMENT }}"
         THRESHOLD=3.0
         
-        SHOULD_COMMIT=$(python -c "try:\n  print('true' if float('$IMPROVEMENT') >= $THRESHOLD else 'false')\nexcept:\n  print('false')" || echo "false")
+        SHOULD_COMMIT=$(python scripts/check_threshold.py "$IMPROVEMENT" "$THRESHOLD" || echo "false")
         
         if [ "$SHOULD_COMMIT" = "true" ]; then
           echo "🎉 Significant improvement: ${IMPROVEMENT}%"
@@ -125,7 +125,7 @@ jobs:
         path: |
           *.pth
           *.json
-        retention-days: 7  # Reduced from 30 to save storage
+        retention-days: 7
       continue-on-error: true
     
     - name: Report usage
